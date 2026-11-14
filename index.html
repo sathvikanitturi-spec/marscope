@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MARSCOPE - Mars globe and route planner</title>
+<style>
+:root{--text:#e8e8e8;--dim:#9a9a9a;--ochre:#d9774a;--rust:#b5482a;--sky:#6fb1dc;--card:#1c1c1c;--line:#343434}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--text);background:#121212;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.app{display:grid;grid-template-columns:1fr 380px;gap:16px;padding:16px;min-height:100vh}
+@media(max-width:940px){.app{grid-template-columns:1fr}}
+.stage{position:relative;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;min-height:70vh}
+canvas{width:min(100%,82vh);aspect-ratio:1;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}
+.title{position:absolute;left:4px;top:0}
+h1{margin:0;font:700 22px system-ui,"Segoe UI",Arial,sans-serif;color:var(--text)}
+.title p{margin:0;color:var(--dim);font-size:13px}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:min(100%,82vh)}
+.hint{color:var(--dim);font-size:13px;text-align:center}
+button,.file{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px 12px;cursor:pointer;font:inherit;font-size:14px}
+button:hover,.file:hover{border-color:#777}button:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+button.on{background:var(--ochre);color:#111;border-color:var(--ochre)}
+.file input{display:none}
+aside{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:14px}
+h2{margin:0 0 8px;font:600 16px system-ui,"Segoe UI",Arial,sans-serif;color:var(--text)}
+.times{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.t b{display:block;font:600 26px system-ui,"Segoe UI",Arial,sans-serif;font-variant-numeric:tabular-nums}.t span{color:var(--dim);font-size:13px}
+.row{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:6px 0;margin-top:8px;color:var(--dim)}.row b{color:var(--text);font-weight:500}
+#list{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#list button{text-align:left;font-size:13px;padding:6px 8px;display:flex;gap:6px;align-items:center}
+#list i{width:9px;height:9px;border-radius:50%;flex:none}
+#list button.sel{border-color:var(--ochre);background:#2a2420}
+.foot{color:var(--dim);font-size:12px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}.tabs button{padding:4px 10px;font-size:13px}
+.rw{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:5px 0}.rw span{color:var(--dim)}.rw b{font-weight:500;text-align:right}
+#panel h2{margin:0 0 6px}#panel h3{margin:12px 0 4px;font:600 14px system-ui,"Segoe UI",Arial,sans-serif;color:var(--text)}
+.na{color:var(--dim)}.warn{color:var(--ochre)}.note{color:var(--dim);font-size:12px}
+.bar{height:10px;background:var(--sky);margin:3px 0 8px}.bar.m{background:var(--ochre)}
+canvas.pr,#leg{aspect-ratio:auto;width:100%;cursor:default}canvas.pr{height:110px;background:#111;border:1px solid var(--line)}#leg{height:52px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{border-top:1px solid var(--line);padding:4px 3px;text-align:left;vertical-align:top}th{color:var(--dim);font-weight:500}
+.sw{display:inline-block;width:10px;height:10px;margin-right:6px}
+#panel input[type=number]{width:100%;background:#111;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px;font:inherit}
+#panel label.s{display:block;color:var(--dim);font-size:12px;margin-top:6px}
+</style></head><body>
+<div class="app">
+<div class="stage"><canvas id="g" width="620" height="620" aria-label="Interactive globe of Mars"></canvas>
+<div class="title"><h1>MARSCOPE</h1><p>Mars globe and route planner</p></div>
+<div class="ctl"><button id="lImg" class="on">Imagery</button><button id="lTopo">Topography</button><button id="lTemp">Temperature</button><button id="bRoute">Route mode: off</button><button id="bRot" class="on">Rotate</button><button id="bLab" class="on">Labels</button><button id="bNight" class="on">Day and night</button><button id="bReset">Reset view</button>
+<label class="file">Load real Mars map<input id="file" type="file" accept="image/*"></label><label class="file">Load MOLA greyscale<input id="file2" type="file" accept="image/*"></label></div>
+<div class="hint">Drag to turn, scroll to zoom, click anywhere to inspect it. <span id="tx">Texture: synthetic placeholder</span></div></div>
+<aside>
+<div class="card"><h2>Mars clock</h2>
+<div class="times"><div class="t"><b id="tJez">--:--</b><span>Jezero Crater</span></div><div class="t"><b id="tGale">--:--</b><span>Gale Crater</span></div></div>
+<div class="row"><span>Coordinated Mars Time</span><b id="mtc">--:--</b></div>
+<div class="row"><span>Season</span><b id="seas">-</b></div>
+<div class="row"><span>Sun overhead at</span><b id="sun">-</b></div></div>
+<div class="card"><div class="tabs" id="tabs"></div><div id="panel"></div></div><div class="card"><h2>Legend</h2><canvas id="leg" width="320" height="52"></canvas><div class="foot" id="legn"></div></div>
+<div class="card"><h2>Landmarks</h2><div id="list"></div></div>
+<div class="card foot">Mars constants: NASA Mars Fact Sheet. Mars clock: Mars24 algorithm (NASA GISS). Imagery and elevation: NASA Mars Trek, when loaded (see the Data tab).</div>
+</aside></div>
+<script>
+const $=id=>document.getElementById(id),D=Math.PI/180;
+const C={rover:"#6fb1dc",volcano:"#ffb26b",terrain:"#f5e1c8",polar:"#ffffff",quake:"#ff7a5c"};
+const LM=[
+{n:"Olympus Mons",lat:18.65,lon:226.2,t:"volcano",k:"Volcano",d:"The tallest volcano known in the solar system, rising roughly 22 km above the surrounding datum."},
+{n:"Tharsis volcanoes",lat:1,lon:247,t:"volcano",k:"Volcano chain",d:"Three giant shield volcanoes (Arsia, Pavonis and Ascraeus) on the huge Tharsis bulge."},
+{n:"Valles Marineris",lat:-13.9,lon:301.5,t:"terrain",k:"Canyon system",d:"A canyon system about 4,000 km long and up to around 7 km deep, far larger than the Grand Canyon."},
+{n:"Hellas Planitia",lat:-42.4,lon:70.5,t:"terrain",k:"Impact basin",d:"One of the largest impact basins in the solar system, about 2,300 km across and several kilometres deep."},
+{n:"Jezero Crater",lat:18.44,lon:77.45,t:"rover",k:"Perseverance landing site",d:"An ancient lake and river delta, now explored by NASA's Perseverance rover in search of past microbial life."},
+{n:"Gale Crater",lat:-4.59,lon:137.44,t:"rover",k:"Curiosity landing site",d:"Home of NASA's Curiosity rover, which climbs the layered slopes of Mount Sharp."},
+{n:"Gusev Crater",lat:-14.57,lon:175.47,t:"rover",k:"Spirit landing site",d:"Landing site of the Spirit rover, which found evidence of past water-altered rocks."},
+{n:"Meridiani Planum",lat:-1.95,lon:354.47,t:"rover",k:"Opportunity landing site",d:"Opportunity explored this plain for nearly 15 years and found minerals formed in water."},
+{n:"Elysium Planitia",lat:4.5,lon:135.62,t:"rover",k:"InSight landing site",d:"NASA's InSight lander recorded more than 1,300 marsquakes from here between 2018 and 2022."},
+{n:"Cerberus Fossae",lat:10,lon:157,t:"quake",k:"Fault system",d:"A set of fractures that is the main known source of marsquakes."},
+{n:"North polar cap",lat:84,lon:0,t:"polar",k:"Ice cap",d:"A cap of water ice with seasonal carbon dioxide frost."},
+{n:"South polar cap",lat:-84,lon:0,t:"polar",k:"Ice cap",d:"Water ice covered by a layer of carbon dioxide ice that persists through the southern summer."}];
+// ---- procedural texture (replace with a real map using the button) ----
+const TW=768,TH=384;let tex=new Uint8ClampedArray(TW*TH*4);
+function h3(i,j,k){let h=Math.imul(i,374761393)^Math.imul(j,668265263)^Math.imul(k,1274126177);h=Math.imul(h^(h>>>13),1103515245);return((h^(h>>>16))>>>0)/4294967295}
+function vn(x,y,z){const i=Math.floor(x),j=Math.floor(y),k=Math.floor(z),fx=x-i,fy=y-j,fz=z-k,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy),w=fz*fz*(3-2*fz),L=(a,b,t)=>a+(b-a)*t;
+ return L(L(L(h3(i,j,k),h3(i+1,j,k),u),L(h3(i,j+1,k),h3(i+1,j+1,k),u),v),L(L(h3(i,j,k+1),h3(i+1,j,k+1),u),L(h3(i,j+1,k+1),h3(i+1,j+1,k+1),u),v),w)}
+function fb(x,y,z,o){let s=0,a=.5,f=1,n=0;for(let q=0;q<o;q++){s+=a*vn(x*f,y*f,z*f);n+=a;f*=2;a/=2}return s/n}
+const F=[[3,247,.24,.5,0],[18.65,226,.07,.55,0],[25,147,.15,.3,0],[-42,70,.17,-.55,-.2],[-50,317,.08,-.3,0],[-13,285,.05,-.3,.5],[-12,296,.05,-.3,.5],[-13,307,.05,-.3,.5],[-14,316,.05,-.3,.5],[9,69,.13,0,.6],[45,335,.2,0,.5],[-35,130,.15,0,.35]].map(f=>[f[0]*D,f[1]*D,f[2],f[3],f[4]]);
+const mix=(a,b,t)=>a+(b-a)*t,cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+function makeTex(){for(let y=0;y<TH;y++){const lat=(.5-(y+.5)/TH)*Math.PI;for(let x=0;x<TW;x++){const lon=((x+.5)/TW-.5)*2*Math.PI,cx=Math.cos(lat)*Math.cos(lon),cy=Math.sin(lat),cz=Math.cos(lat)*Math.sin(lon);
+ let e=fb(cx*3,cy*3,cz*3,5),dk=fb(cx*2+9,cy*2+9,cz*2+9,3)-.2;
+ for(const f of F){const d=Math.acos(cl(Math.sin(lat)*Math.sin(f[0])+Math.cos(lat)*Math.cos(f[0])*Math.cos(lon-f[1]),-1,1)),g=Math.exp(-((d/f[2])**2));e+=f[3]*g;dk+=f[4]*g}
+ const t=cl((e-.2)/.9);let r,g,b;
+ if(t<.5){const s=t*2;r=mix(112,178,s);g=mix(52,94,s);b=mix(34,56,s)}else{const s=(t-.5)*2;r=mix(178,226,s);g=mix(94,160,s);b=mix(56,104,s)}
+ const d=cl(dk*1.3)*.7;r=mix(r,62,d);g=mix(g,36,d);b=mix(b,32,d);
+ const pc=cl((Math.abs(lat)-(1.36+(e-.5)*.1))/.07);r=mix(r,244,pc);g=mix(g,238,pc);b=mix(b,232,pc);
+ const o=(y*TW+x)*4;tex[o]=r;tex[o+1]=g;tex[o+2]=b;tex[o+3]=255}}}
+// ---- Mars time and sun ----
+function mars(){const jt=Date.now()/864e5+2440587.5+69.184/86400,msd=(jt-2405522.0028779)/1.0274912517,mtc=((msd%1)+1)%1*24,dt=jt-2451545,M=(19.3871+.52402075*dt)*D,
+ eoc=(10.691+3e-7*dt)*Math.sin(M)+.623*Math.sin(2*M)+.05*Math.sin(3*M)+.005*Math.sin(4*M)+.0005*Math.sin(5*M),ls=((270.3863+.5240384*dt+eoc)%360+360)%360;
+ return{mtc,ls,decl:Math.asin(.4257*Math.sin(ls*D)),slon:(12-mtc)*15*D}}
+const hm=h=>{h=(h%24+24)%24;return String(Math.floor(h)).padStart(2,"0")+":"+String(Math.floor(h%1*60)).padStart(2,"0")};
+function clock(){const m=mars();$("tJez").textContent=hm(m.mtc+77.45/15);$("tGale").textContent=hm(m.mtc+137.44/15);$("mtc").textContent=hm(m.mtc);
+ $("seas").textContent=["Northern spring","Northern summer","Northern autumn","Northern winter"][Math.floor(m.ls/90)]+" · Ls "+Math.round(m.ls)+"°";
+ let sl=m.slon/D;sl=((sl%360)+360)%360;$("sun").textContent=Math.round(sl)+"°E, "+Math.abs(m.decl/D).toFixed(0)+"°"+(m.decl>=0?"N":"S");dirty=true}
+// ===== MARSCOPE features =====
+const RAD=[300,500,1800,1100,45,75,80,100,300,300,600,600],MIS={4:"Perseverance rover, landed 18 Feb 2021",5:"Curiosity rover, landed 6 Aug 2012",6:"Spirit rover, landed 4 Jan 2004",7:"Opportunity rover, landed 25 Jan 2004",8:"InSight lander, landed 26 Nov 2018 (mission ended 2022)"};
+LM.forEach((l,i)=>{l.r=RAD[i];l.m=MIS[i]});
+const RM=3389.5,EMIN=-8200,EMAX=21200,E=new Float32Array(TW*TH),f0=(n,d=0)=>Number(n).toLocaleString("en",{maximumFractionDigits:d,minimumFractionDigits:d});
+let userData=false,realTex=false,ELO=EMIN,EHI=EMAX,LIM=8,MASS=70,layer="img",routeMode=false,loc=null,A=null,B=null,route=null,tab="loc";
+// modelled elevation: an approximation, NOT MOLA. Load a real greyscale MOLA map to replace it.
+const FT=[[3,247,.3,7000],[18.65,226.2,.055,22000],[-8.35,239.9,.04,8500],[.8,246.7,.04,8500],[11.8,255.5,.04,8800],[25,147.2,.06,9500],[25,147.2,.14,3500],[-42.4,70.5,.16,-9500],[-49.7,316.7,.07,-4200],[-12,290,.05,-5500],[-12,300,.05,-5500],[-13,310,.05,-5000],[18.44,77.45,.012,-2800],[-4.59,137.44,.012,-2600]].map(f=>[f[0]*D,f[1]*D,f[2],f[3]]);
+function model(lat,lon){const cx=Math.cos(lat)*Math.cos(lon),cy=Math.sin(lat),cz=Math.cos(lat)*Math.sin(lon),q=cl((cy-.2+(fb(cx*2+5,cy*2+5,cz*2+5,3)-.5)*.5)/.45);
+ let e=1600-6000*q*q*(3-2*q)+(fb(cx*2,cy*2,cz*2,4)-.5)*3500+(fb(cx*8,cy*8,cz*8,3)-.5)*1500;
+ for(const f of FT){const d=Math.acos(cl(Math.sin(lat)*Math.sin(f[0])+Math.cos(lat)*Math.cos(f[0])*Math.cos(lon-f[1]),-1,1));e+=f[3]*Math.exp(-((d/f[2])*(d/f[2])))}
+ return cl(e,EMIN,EMAX)}
+function buildElev(){for(let y=0;y<TH;y++)for(let x=0;x<TW;x++)E[y*TW+x]=model((.5-(y+.5)/TH)*Math.PI,((x+.5)/TW-.5)*2*Math.PI)}
+const gi=(lat,lon)=>{const u=((lon/360+.5)%1+1)%1;return cl(((.5-lat/180)*TH)|0,0,TH-1)*TW+Math.min(TW-1,(u*TW)|0)};
+const elevAt=(lat,lon)=>E[gi(lat,lon)];
+function slopeAt(lat,lon){const i=gi(lat,lon),x=i%TW,y=(i-x)/TW,xr=y*TW+(x+1)%TW,xl=y*TW+(x+TW-1)%TW,yu=Math.max(y-1,0)*TW+x,yd=Math.min(y+1,TH-1)*TW+x,
+ cx=2*Math.PI*RM*1000*Math.max(.05,Math.cos(lat*D))/TW,cy=Math.PI*RM*1000/TH;return Math.atan(Math.hypot((E[xr]-E[xl])/(2*cx),(E[yu]-E[yd])/(2*cy)))/D}
+const tK=(lat,e)=>{const s=Math.sin(lat*D);return 221-75*s*s-1.8*e/1000},tAmp=lat=>45*Math.cos(lat*D)+8;
+function dist(a,b,c,d){const p=a*D,q=c*D,dl=(d-b)*D,x=Math.sin((q-p)/2)**2+Math.cos(p)*Math.cos(q)*Math.sin(dl/2)**2;return 2*RM*Math.asin(Math.min(1,Math.sqrt(x)))}
+function lut(st,n){const o=new Uint8ClampedArray(n*3);for(let i=0;i<n;i++){const t=i/(n-1);let k=0;while(k<st.length-2&&t>st[k+1][0])k++;const a=st[k],b=st[k+1],u=cl((t-a[0])/(b[0]-a[0]));for(let c=0;c<3;c++)o[i*3+c]=a[1][c]+(b[1][c]-a[1][c])*u}return o}
+const sp=v=>(v-EMIN)/(EMAX-EMIN);
+const EL=lut([[0,[26,42,156]],[sp(-3500),[59,141,227]],[sp(-1500),[102,207,217]],[sp(1000),[242,221,92]],[sp(5000),[232,144,58]],[sp(10000),[204,58,44]],[sp(15000),[210,60,44]],[1,[255,255,255]]],1024);
+const TL=lut([[0,[11,26,107]],[.28,[58,134,224]],[.54,[244,228,106]],[.79,[240,144,47]],[1,[212,42,31]]],256);
+const texT=new Uint8ClampedArray(TW*TH*4),texH=new Uint8ClampedArray(TW*TH*4),cur=()=>layer==="topo"?texT:layer==="temp"?texH:tex;
+function buildLayers(){for(let y=0;y<TH;y++){const lat=(.5-(y+.5)/TH)*180;for(let x=0;x<TW;x++){const i=y*TW+x,e=E[i],xr=y*TW+(x+1)%TW,xl=y*TW+(x+TW-1)%TW,yu=Math.max(y-1,0)*TW+x,yd=Math.min(y+1,TH-1)*TW+x,
+ sh=cl(1+.13*((E[yu]-E[yd])-(E[xr]-E[xl]))/1000,.55,1.45),k=(cl(sp(e),0,1)*1023|0)*3,t=(cl((tK(lat,e)-140)/140*255,0,255)|0)*3,h=.85+.15*sh,o=i*4;
+ texT[o]=EL[k]*sh;texT[o+1]=EL[k+1]*sh;texT[o+2]=EL[k+2]*sh;texT[o+3]=255;texH[o]=TL[t]*h;texH[o+1]=TL[t+1]*h;texH[o+2]=TL[t+2]*h;texH[o+3]=255}}}
+const badge=()=>{$("tx").textContent=layer==="img"?(realTex?"Imagery: your map":"Imagery: synthetic placeholder"):(layer==="temp"?"Temperature: illustrative model; ":"")+"Elevation: "+(userData?"your loaded map":"modelled approximation, not MOLA")};
+function legend(){const c=$("leg").getContext("2d"),T=layer==="temp";c.clearRect(0,0,320,52);
+ if(layer==="img"){$("legn").textContent="Surface imagery layer. Switch to Topography or Temperature for a colour scale.";badge();return}
+ const L=T?TL:EL,n=T?256:1024,g=c.createLinearGradient(8,0,312,0);for(let i=0;i<=10;i++){const k=(i/10*(n-1))|0;g.addColorStop(i/10,`rgb(${L[k*3]},${L[k*3+1]},${L[k*3+2]})`)}
+ c.fillStyle=g;c.fillRect(8,6,304,14);c.fillStyle="#e8e8e8";c.font="11px Arial,sans-serif";
+ (T?[140,180,220,260].map(v=>[(v-140)/140,v+" K"]):[-8,0,8,16].map(v=>[sp(v*1000),v+" km"])).forEach(([t,s])=>{c.fillRect(8+t*304,20,1,5);c.fillText(s,Math.min(280,Math.max(2,8+t*304-12)),38)});
+ $("legn").textContent=T?"Mean annual surface temperature, modelled from latitude and elevation. Blue = cold, yellow = warm, red = hottest. Illustrative, not a measurement.":"Elevation above or below the Mars datum. Blue = deepest basins, yellow = mid, red = highlands, white = extreme summits (reference range −8.2 to +21.2 km).";badge()}
+// ---- panels ----
+const rw=(a,b)=>`<div class="rw"><span>${a}</span><b>${b}</b></div>`,na='<span class="na">Data unavailable</span>';
+function terr(lat,e){if(Math.abs(lat)>80)return"Polar region";if(e<-3000)return"Northern lowland plain";if(e>3500)return"Elevated volcanic or highland terrain";if(e>1000)return"Cratered southern highlands";return"Intermediate plain or transition zone"}
+function prof(el,pts,lim){const c=el.getContext("2d"),w=el.width=el.clientWidth*2,h=el.height=220;c.clearRect(0,0,w,h);if(!pts.length)return;
+ const mn=Math.min(...pts.map(p=>p.e)),mx=Math.max(...pts.map(p=>p.e)),dm=pts[pts.length-1].d||1,X=d=>10+d/dm*(w-20),Y=e=>h-24-(e-mn)/Math.max(1,mx-mn)*(h-48);
+ c.strokeStyle="#6fb1dc";c.lineWidth=2.5;c.beginPath();pts.forEach((p,i)=>i?c.lineTo(X(p.d),Y(p.e)):c.moveTo(X(p.d),Y(p.e)));c.stroke();
+ if(lim)pts.forEach(p=>{if(p.s>lim){c.fillStyle="#d9774a";c.fillRect(X(p.d)-3,Y(p.e)-3,6,6)}});
+ c.fillStyle="#9a9a9a";c.font="20px Arial,sans-serif";c.fillText(f0(mx)+" m",10,18);c.fillText(f0(mn)+" m",10,h-6);c.fillText(f0(dm)+" km",w-120,h-6)}
+function locHTML(){if(!loc)return'<h2>Location intelligence</h2><p>Click anywhere on the globe, or pick a landmark, to inspect it.</p><p class="note">Elevation and temperature come from a modelled approximation unless you load your own greyscale MOLA map.</p>';
+ const {lat,lon}=loc,e=elevAt(lat,lon),sl=slopeAt(lat,lon),Tk=tK(lat,e),Am=tAmp(lat),near=LM.map(l=>({l,d:dist(lat,lon,l.lat,l.lon)})).sort((a,b)=>a.d-b.d),inn=near.find(n=>n.d<=n.l.r),lonE=((lon%360)+360)%360;
+ return`<h2>${inn?inn.l.n:"Unnamed location"}</h2>${inn?`<div class="note">${inn.l.k}. ${inn.l.d}</div>`:""}
+ ${rw("Latitude",f0(Math.abs(lat),3)+"°"+(lat<0?" S":" N"))}${rw("Longitude",f0(lonE,3)+"° E")}${rw("Elevation",f0(e)+" m ("+f0(e/1000,2)+" km)")}${rw("Slope (coarse, ~28 km scale)",f0(sl,2)+"°")}
+ ${rw("Terrain type (estimated)",terr(lat,e))}${rw("Gravity","3.71 m/s²")}${rw("Mean temperature (modelled)",f0(Tk-273.15)+" °C · "+f0(Tk)+" K")}
+ ${rw("Afternoon high / pre-dawn low (modelled)",f0(Tk+.75*Am-273.15)+" / "+f0(Tk-.55*Am-273.15)+" °C")}${rw("Surface composition",na)}${rw("Mission observations",inn&&inn.l.m?inn.l.m:na)}
+ ${rw("Elevation source",userData?"Loaded MOLA map":"Modelled approximation (not MOLA)")}${rw("Observation date",userData?"Per your file":"Not applicable (model)")}
+ <h3>Nearby formations</h3>${near.slice(0,3).map(n=>rw(n.l.n+" · "+n.l.k,f0(n.d)+" km")).join("")}
+ <h3>East–west terrain profile (±10° longitude)</h3><canvas class="pr" id="pf"></canvas><div class="note">Slope and temperature are coarse or modelled. Rover-scale slopes are much steeper than at this resolution.</div>`}
+function locDraw(){if(!loc||!$("pf"))return;const pts=[];let d=0,pl=null;for(let i=0;i<=80;i++){const lo=loc.lon-10+i*.25,e=elevAt(loc.lat,lo);if(pl!==null)d+=dist(loc.lat,pl,loc.lat,lo);pl=lo;pts.push({d,e})}prof($("pf"),pts)}
+function mkRoute(){const L=dist(A.lat,A.lon,B.lat,B.lon),n=cl(Math.round(L/25),40,400),pts=[],v=(la,lo)=>[Math.cos(la*D)*Math.cos(lo*D),Math.cos(la*D)*Math.sin(lo*D),Math.sin(la*D)],p=v(A.lat,A.lon),q=v(B.lat,B.lon),om=Math.acos(cl(p[0]*q[0]+p[1]*q[1]+p[2]*q[2],-1,1))||1e-6;
+ for(let i=0;i<=n;i++){const t=i/n,s1=Math.sin((1-t)*om)/Math.sin(om),s2=Math.sin(t*om)/Math.sin(om),x=s1*p[0]+s2*q[0],y=s1*p[1]+s2*q[1],z=s1*p[2]+s2*q[2],lat=Math.asin(z)/D,lon=Math.atan2(y,x)/D;pts.push({lat,lon,e:elevAt(lat,lon),d:t*L,s:0})}
+ let ms=0,up=0;for(let i=1;i<pts.length;i++){const dz=pts[i].e-pts[i-1].e,dd=(pts[i].d-pts[i-1].d)*1000||1;pts[i].s=Math.atan(Math.abs(dz)/dd)/D;ms=Math.max(ms,pts[i].s);if(dz>0)up+=dz}
+ route={pts,L,ms,up,step:L/n,hit:LM.filter(l=>pts.some(p=>dist(p.lat,p.lon,l.lat,l.lon)<l.r))}}
+function routePick(lat,lon){if(!A||(A&&B)){A={lat,lon};B=null;route=null}else{B={lat,lon};mkRoute()}tab="route";panel();dirty=true}
+function routeRes(){if(!A)return'<p>Turn on <b>Route mode</b> under the globe, then click a start point (A) and a destination (B).</p>';if(!B||!route)return"<p>Start point set. Click the destination (B).</p>";
+ const r=route,st=r.pts.filter(p=>p.s>LIM).length,p0=r.pts[0],p1=r.pts[r.pts.length-1];
+ return`${rw("Great-circle distance",f0(r.L)+" km (sphere, R = 3,389.5 km)")}${rw("Start / end elevation",f0(p0.e)+" / "+f0(p1.e)+" m")}${rw("Elevation difference",f0(p1.e-p0.e)+" m")}${rw("Highest / lowest on route",f0(Math.max(...r.pts.map(p=>p.e)))+" / "+f0(Math.min(...r.pts.map(p=>p.e)))+" m")}${rw("Total climb",f0(r.up)+" m")}${rw("Steepest estimated slope",f0(r.ms,2)+"° (every ~"+f0(r.step)+" km)")}
+ <h3>Elevation along route</h3><canvas class="pr" id="rf"></canvas><h3>Estimated hazards</h3><p class="${st?"warn":""}">${st?`${st} sample(s) exceed ${LIM}° (marked on the profile).`:`No samples exceed ${LIM}° at this coarse sampling.`}</p>
+ <p>${r.hit.length?"Passes through or near: "+r.hit.map(l=>l.n).join(", ")+" (estimated obstacle).":"No named major feature crossed."}</p><h3>Observed hazards</h3><p class="na">None loaded. No HiRISE hazard data is connected.</p>
+ <p class="note">A straight great-circle candidate route over a coarse model. It avoids nothing and is not certified safe for astronauts or rovers.</p>`}
+const routeHTML=()=>`<h2>Route analysis</h2><label class="s" for="lim">Slope warning (degrees)</label><input id="lim" type="number" min="1" max="40" value="${LIM}"><div id="rres">${routeRes()}</div>`;
+const routeDraw=()=>{if(route&&$("rf"))prof($("rf"),route.pts,LIM)};
+const gravOut=m=>{const we=m*9.81,wm=m*3.71;return rw("Input mass",f0(m,2)+" kg")+rw("Weight on Earth (g = 9.81 m/s²)",f0(we,1)+" N")+rw("Weight on Mars (g = 3.71 m/s²)",f0(wm,1)+" N")+rw("Difference",f0(we-wm,1)+" N")+rw("Mars / Earth gravity",f0(3.71/9.81,3)+" (about 37.8%)")+`<h3>Weight comparison</h3>Earth<div class="bar"></div>Mars<div class="bar m" style="width:${3.71/9.81*100}%"></div>`};
+const gravHTML=()=>`<h2>Gravity and weight</h2><label class="s" for="mass">Mass (kg)</label><input id="mass" type="number" min="0" value="${MASS}"><p class="note">Mass (kg) is the amount of matter and never changes. Weight is a force in newtons: W = m × g.</p><div id="gout">${gravOut(MASS)}</div>`;
+const MIN=[["Basaltic rock","#6b5a52","Volcanic crust covering most of the surface. Shows magma composition and volcanic history."],["Iron oxides (e.g. hematite)","#b5482a","Oxidised dust gives Mars its red colour; some forms need water to form."],["Olivine","#7fb069","Weathers easily in water; where it survives, liquid water was limited."],["Pyroxene","#d9a441","Common volcanic mineral that tracks crustal and volcanic evolution."],["Clay minerals","#6fb1dc","Form when rock reacts with water for long periods; mark early, wetter conditions."],["Hydrated sulfates","#e8e0c8","Form from salty, often acidic water; mark later watery or evaporative settings."],["Water-ice signatures","#ffffff","Polar caps and subsurface ice; show where water is stored today."]];
+const intHTML=()=>`<h2>Interior and density</h2><svg viewBox="0 0 240 150" width="100%"><circle cx="120" cy="75" r="68" fill="#7a3a24"/><circle cx="120" cy="75" r="62" fill="#a0522d"/><circle cx="120" cy="75" r="37" fill="#e5a13a"/><g fill="#fff" font-size="9"><text x="120" y="79" text-anchor="middle" fill="#2a1408">Core</text><text x="120" y="45" text-anchor="middle">Mantle</text><text x="196" y="30">Crust</text></g><path d="M170 35 L190 28" stroke="#fff" stroke-width=".7"/></svg>
+ <div class="note">Schematic, not to scale (crust drawn thicker than reality).</div>${rw("Mean bulk density","≈ 3,933 kg/m³")}${rw("Earth mean density","≈ 5,514 kg/m³")}${rw("Crust thickness","roughly 20–70 km (InSight estimates)")}${rw("Core radius","≈ 1,830 km (InSight), liquid")}${rw("Typical surface basalt","≈ 2,900–3,000 kg/m³")}
+ <p class="note">Bulk density averages the whole planet, including the dense core. It is not the density of local rock or soil. Regolith is iron-rich basaltic dust and sand, and Phoenix found perchlorate salts in it.</p><h3>Surface composition guide</h3><table>${MIN.map(m=>`<tr><td><span class="sw" style="background:${m[1]}"></span>${m[0]}</td><td>${m[2]}</td></tr>`).join("")}</table>
+ <p class="note">No CRISM map is loaded, so no mineral locations are shown. A mineral detection does not prove that liquid water exists today.</p>`;
+function climHTML(){let t="";if(loc){const e=elevAt(loc.lat,loc.lon),T=tK(loc.lat,e);t=`<h3>Selected location (modelled)</h3>${rw("Mean",f0(T-273.15)+" °C · "+f0(T)+" K")}${rw("Day–night swing",f0(1.3*tAmp(loc.lat))+" °C")}`}
+ if(A&&B){const f=q=>{const T=tK(q.lat,elevAt(q.lat,q.lon));return f0(T-273.15)+" °C / "+f0(T)+" K"};t+=`<h3>Compare A and B (modelled mean)</h3>${rw("Point A",f(A))}${rw("Point B",f(B))}`}
+ return`<h2>Temperature and atmosphere</h2>${rw("Global mean surface temperature","≈ −63 °C · 210 K")}${rw("Typical range","≈ −140 °C to +20 °C (133–293 K)")}${rw("Poles (winter)","Coldest, near the CO₂ frost point")}${rw("Equator (summer afternoon)","Can rise above 0 °C")}
+ <p class="note">Mars has a 687-day year and an eccentric orbit, so seasons differ by hemisphere. The temperature layer is an illustrative model, not observation data.</p>${t}
+ <h3>Atmosphere (reference values)</h3>${rw("Surface pressure","≈ 610 Pa mean (about 0.6% of Earth), varies seasonally")}${rw("Carbon dioxide","≈ 95%")}${rw("Nitrogen / argon","≈ 2.8% / 2.1%")}${rw("Wind speed and direction",na)}${rw("Dust activity",na)}${rw("Atmospheric density",na)}
+ <p class="note">Mars has a very thin atmosphere dominated by CO₂. Rover (REMS, MEDA) readings are not connected here, and historical measurements must never be shown as live weather.</p>`}
+const CMP=[["Surface gravity","9.81 m/s²","3.71 m/s²",3.71/9.81],["Mass","5.97×10²⁴ kg","6.42×10²³ kg",.107],["Mean density","5,514 kg/m³","3,933 kg/m³",.713],["Diameter","12,742 km","6,779 km",.532],["Surface area","510 M km²","145 M km²",.284],["Surface pressure","101,325 Pa","≈ 610 Pa",.006],["Average temperature","≈ 15 °C","≈ −63 °C",null],["Length of day","24 h","24 h 39 min",1.03],["Length of year","365 days","687 days",1.88],["Escape velocity","11.19 km/s","5.03 km/s",.45]];
+const cmpHTML=()=>`<h2>Earth vs Mars</h2><table><tr><th></th><th>Earth</th><th>Mars</th></tr>${CMP.map(c=>`<tr><td>${c[0]}${c[3]!==null?`<div class="bar m" style="width:${Math.max(2,Math.min(100,c[3]*100))}%;height:6px;margin:3px 0 0"></div>`:""}</td><td>${c[1]}</td><td>${c[2]}</td></tr>`).join("")}</table><p class="note">Bar = Mars as a share of Earth (capped at 100%).</p>`;
+const DS=[["MOLA elevation","Mars Orbiter Laser Altimeter (MGS)","NASA/GSFC","1997–2006","≈ 463 m/pixel gridded","metres","Global; elevation only"],["HiRISE imagery","HiRISE (MRO)","NASA/JPL/Univ. of Arizona","MRO era (2006→)","≈ 0.3 m/pixel","image","Covers a small fraction of Mars"],["CRISM spectra","CRISM (MRO)","NASA/JHU-APL","MRO era (2006→)","≈ 18–36 m/pixel (targeted)","reflectance","Partial coverage"],["THEMIS thermal","THEMIS (Mars Odyssey)","NASA/ASU","2001→","≈ 100 m/pixel (IR)","kelvin","Temperature varies with time of day"],["MEDA","Perseverance rover","NASA/JPL","2021→","Single site (Jezero)","pressure, wind, temperature","One location only"],["REMS","Curiosity rover","NASA/JPL","2012→","Single site (Gale)","pressure, temperature, wind","One location; some sensors degraded"]];
+const dataHTML=()=>`<h2>Datasets</h2><p class="note">${userData?"Status: <b>MOLA elevation map loaded</b>. Other datasets below are reference only and are not loaded.":"Status: <b>none of these are loaded</b>. Values come from an approximate model unless a greyscale MOLA map is loaded."} Connect real data before presenting any value as a measurement.</p>
+ <label class="s" for="lo">Your MOLA map: black = elevation (m)</label><input id="lo" type="number" value="${ELO}"><label class="s" for="hi">White = elevation (m)</label><input id="hi" type="number" value="${EHI}"><p class="note">Set these before loading a greyscale elevation image (for example from NASA Mars Trek). Colour maps cannot be read as elevation.</p>
+ ${DS.map(d=>`<h3>${d[0]}</h3>${rw("Instrument",d[1])}${rw("Source",d[2])}${rw("Observation dates",d[3])}${rw("Resolution",d[4])}${rw("Units",d[5])}${rw("Limits",d[6])}${rw("Status",d[0]==="MOLA elevation"&&userData?"Loaded":"Not loaded")}`).join("")}`;
+const TABS=[["loc","Location",locHTML],["route","Route",routeHTML],["grav","Gravity",gravHTML],["int","Interior",intHTML],["clim","Climate",climHTML],["cmp","Compare",cmpHTML],["data","Data",dataHTML]];
+function panel(){$("tabs").innerHTML=TABS.map(t=>`<button class="${t[0]===tab?"on":""}" data-t="${t[0]}">${t[1]}</button>`).join("");$("panel").innerHTML=TABS.find(t=>t[0]===tab)[2]();if(tab==="loc")locDraw();if(tab==="route")routeDraw()}
+$("tabs").onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;panel()}};
+$("panel").oninput=e=>{const i=e.target.id,v=+e.target.value;if(i==="mass"){MASS=v||0;$("gout").innerHTML=gravOut(MASS)}else if(i==="lim"){LIM=v||8;$("rres").innerHTML=routeRes();routeDraw()}else if(i==="lo")ELO=v;else if(i==="hi")EHI=v};
+const setLayer=m=>{layer=m;[["img","lImg"],["topo","lTopo"],["temp","lTemp"]].forEach(([k,id])=>$(id).classList.toggle("on",k===m));legend();dirty=true};
+$("lImg").onclick=()=>setLayer("img");$("lTopo").onclick=()=>setLayer("topo");$("lTemp").onclick=()=>setLayer("temp");
+$("bRoute").onclick=e=>{routeMode=!routeMode;e.target.classList.toggle("on",routeMode);e.target.textContent="Route mode: "+(routeMode?"on (click A, then B)":"off")};
+$("file2").onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{const c=document.createElement("canvas");c.width=TW;c.height=TH;const x=c.getContext("2d");x.drawImage(im,0,0,TW,TH);const d=x.getImageData(0,0,TW,TH).data;
+ for(let i=0;i<E.length;i++)E[i]=ELO+(d[i*4]*.3+d[i*4+1]*.59+d[i*4+2]*.11)/255*(EHI-ELO);userData=true;buildLayers();badge();if(route)mkRoute();panel();dirty=true};im.src=URL.createObjectURL(f)};
+function globeClick(x,y){const r=R(),c=S/2,qx=(x-c)/r,qy=(c-y)/r,r2=qx*qx+qy*qy;if(r2>=1)return;const z=Math.sqrt(1-r2),cs=Math.cos(lat0),sl=Math.sin(lat0),yy=qy*cs+z*sl,zz=-qy*sl+z*cs,lat=Math.asin(yy)/D,lon=((((lon0+Math.atan2(qx,zz))/D)%360)+360)%360;
+ if(routeMode){routePick(lat,lon);return}sel=-1;loc={lat,lon};tab="loc";document.querySelectorAll("#list button").forEach(b=>b.classList.remove("sel"));panel();dirty=true}
+function overlay(){const path=()=>{let pen=false;g.beginPath();route.pts.forEach(q=>{const p=proj(q);if(p.z>.02){pen?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y);pen=true}else pen=false});g.stroke()};
+ if(route){g.lineJoin="round";g.lineWidth=5;g.strokeStyle="rgba(0,0,0,.65)";path();g.lineWidth=2.5;g.strokeStyle="#fff";g.setLineDash([7,5]);path();g.setLineDash([])}
+ if(loc&&!A){const p=proj(loc);if(p.z>.05){g.strokeStyle="#fff";g.lineWidth=2;g.beginPath();g.arc(p.x,p.y,10,0,7);g.moveTo(p.x-16,p.y);g.lineTo(p.x-6,p.y);g.moveTo(p.x+6,p.y);g.lineTo(p.x+16,p.y);g.moveTo(p.x,p.y-16);g.lineTo(p.x,p.y-6);g.moveTo(p.x,p.y+6);g.lineTo(p.x,p.y+16);g.stroke()}}
+ [[A,"A","#7be08a"],[B,"B","#ff8a7a"]].forEach(([q,t,col])=>{if(!q)return;const p=proj(q);if(p.z<.05)return;g.fillStyle=col;g.strokeStyle="#000";g.lineWidth=2;g.beginPath();g.arc(p.x,p.y,9,0,7);g.stroke();g.fill();g.fillStyle="#000";g.fillText(t,p.x-4,p.y+4)})}
+// ---- globe ----
+const S=620,cv=$("g"),g=cv.getContext("2d"),off=document.createElement("canvas");off.width=off.height=S;
+const og=off.getContext("2d"),img=og.createImageData(S,S),px=img.data;
+let lat0=18*D,lon0=77*D,zoom=1,auto=true,showL=true,showN=true,fly=null,sel=-1,dirty=true;
+const R=()=>S*.4*zoom;
+function render(){const T=cur(),r=R(),c=S/2,sl=Math.sin(lat0),cs=Math.cos(lat0),m=mars(),sd=Math.sin(m.decl),cd=Math.cos(m.decl);
+ for(let py=0;py<S;py++)for(let p=0;p<S;p++){const x=(p-c)/r,y=(c-py)/r,r2=x*x+y*y,o=(py*S+p)*4;if(r2>=1){px[o+3]=0;continue}
+  const z=Math.sqrt(1-r2),yy=y*cs+z*sl,zz=-y*sl+z*cs,lat=Math.asin(yy),lon=lon0+Math.atan2(x,zz);
+  let u=(lon/(2*Math.PI)+.5)%1;if(u<0)u+=1;const ti=(Math.min(TH-1,((.5-lat/Math.PI)*TH)|0)*TW+((u*TW)|0))*4;
+  let b=1;if(showN){const dot=yy*sd+Math.cos(lat)*cd*Math.cos(lon-m.slon),k=cl((dot+.08)/.23);b=.09+.91*k*k*(3-2*k)*(.65+.35*Math.max(0,dot))}
+  b*=.5+.5*Math.pow(z,.6);px[o]=T[ti]*b;px[o+1]=T[ti+1]*b;px[o+2]=T[ti+2]*b;px[o+3]=255}
+ og.putImageData(img,0,0);g.clearRect(0,0,S,S);
+ const gr=g.createRadialGradient(c,c,r*.95,c,c,r*1.2);gr.addColorStop(0,"rgba(255,170,105,.6)");gr.addColorStop(.35,"rgba(230,120,80,.22)");gr.addColorStop(1,"rgba(200,90,60,0)");
+ g.drawImage(off,0,0);
+ g.font="13px 'Segoe UI',Arial,sans-serif";g.lineJoin="round";
+ LM.forEach((l,i)=>{const p=proj(l);if(p.z<.05)return;const a=Math.min(1,p.z*3);g.globalAlpha=a;
+  if(i===sel){g.strokeStyle="#fff";g.lineWidth=2;g.beginPath();g.arc(p.x,p.y,11+3*Math.sin(Date.now()/250),0,7);g.stroke()}
+  g.fillStyle=C[l.t];g.strokeStyle="rgba(20,8,5,.9)";g.lineWidth=2;g.beginPath();g.arc(p.x,p.y,5,0,7);g.stroke();g.fill();
+  if(showL||i===sel){g.lineWidth=3.5;g.strokeText(l.n,p.x+10,p.y+4);g.fillStyle="#ffffff";g.fillText(l.n,p.x+10,p.y+4)}});g.globalAlpha=1;overlay()}
+function proj(l){const lt=l.lat*D,dl=l.lon*D-lon0,X=Math.cos(lt)*Math.sin(dl),Zp=Math.cos(lt)*Math.cos(dl),Y=Math.sin(lt),cs=Math.cos(lat0),sl=Math.sin(lat0),y=Y*cs-Zp*sl,z=Y*sl+Zp*cs,r=R();return{x:S/2+X*r,y:S/2-y*r,z}}
+function select(i,go){const l=LM[i];if(routeMode){routePick(l.lat,l.lon);return}
+ sel=i;loc={lat:l.lat,lon:l.lon};tab="loc";document.querySelectorAll("#list button").forEach((b,j)=>b.classList.toggle("sel",j===i));
+ if(go){fly={lat:cl(l.lat*D,-1.2,1.2),lon:l.lon*D};setAuto(false)}panel();dirty=true}
+function setAuto(v){auto=v;$("bRot").classList.toggle("on",v)}
+LM.forEach((l,i)=>{const b=document.createElement("button");b.innerHTML=`<i style="background:${C[l.t]}"></i>${l.n}`;b.onclick=()=>select(i,true);$("list").appendChild(b)});
+// ---- interaction ----
+let drag=null;
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY}});
+cv.addEventListener("pointermove",e=>{if(!drag)return;const k=S/cv.getBoundingClientRect().width,r=R();lon0-=(e.clientX-drag.x)*k/r;lat0=cl(lat0+(e.clientY-drag.y)*k/r,-1.3,1.3);drag.x=e.clientX;drag.y=e.clientY;fly=null;dirty=true});
+cv.addEventListener("pointerup",e=>{if(!drag)return;const moved=Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy);drag=null;
+ if(moved<5){const rc=cv.getBoundingClientRect(),k=S/rc.width,x=(e.clientX-rc.left)*k,y=(e.clientY-rc.top)*k;let best=-1,bd=18;
+  LM.forEach((l,i)=>{const p=proj(l);if(p.z>.05){const d=Math.hypot(p.x-x,p.y-y);if(d<bd){bd=d;best=i}}});if(best>=0)select(best,false);else globeClick(x,y)}else setAuto(false)});
+cv.addEventListener("wheel",e=>{e.preventDefault();zoom=cl(zoom*(e.deltaY<0?1.1:.91),.7,2.6);dirty=true},{passive:false});
+$("bRot").onclick=()=>setAuto(!auto);
+$("bLab").onclick=e=>{showL=!showL;e.target.classList.toggle("on",showL);dirty=true};
+$("bNight").onclick=e=>{showN=!showN;e.target.classList.toggle("on",showN);dirty=true};
+$("bReset").onclick=()=>{fly={lat:18*D,lon:77*D};zoom=1;dirty=true};
+$("file").onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{const c=document.createElement("canvas");c.width=TW;c.height=TH;const x=c.getContext("2d");x.drawImage(im,0,0,TW,TH);tex.set(x.getImageData(0,0,TW,TH).data);realTex=true;badge();dirty=true};im.src=URL.createObjectURL(f)};
+function loop(){if(fly){let dl=fly.lon-lon0;dl=Math.atan2(Math.sin(dl),Math.cos(dl));lon0+=dl*.12;lat0+=(fly.lat-lat0)*.12;if(Math.abs(dl)<.002&&Math.abs(fly.lat-lat0)<.002)fly=null;dirty=true}
+ else if(auto&&!drag){lon0+=.0025;dirty=true}
+ if(sel>=0)dirty=true;if(dirty){dirty=false;render()}requestAnimationFrame(loop)}
+makeTex();buildElev();buildLayers();legend();panel();clock();setInterval(clock,1000);loop();
+// ---- auto-load real data if the files are next to this page (works when hosted, not from file://) ----
+function loadURL(srcs,cb){if(!srcs.length)return;const im=new Image();im.onload=()=>{try{const c=document.createElement("canvas");c.width=TW;c.height=TH;const x=c.getContext("2d");x.drawImage(im,0,0,TW,TH);cb(x.getImageData(0,0,TW,TH).data)}catch(e){console.warn("Cannot read image data",e)}};im.onerror=()=>loadURL(srcs.slice(1),cb);im.src=srcs[0]}
+loadURL(["mars-color.jpg","mars-color.png"],d=>{tex.set(d);realTex=true;badge();dirty=true});
+loadURL(["mars-mola.png","mars-mola.jpg"],d=>{for(let i=0;i<E.length;i++)E[i]=ELO+(d[i*4]*.3+d[i*4+1]*.59+d[i*4+2]*.11)/255*(EHI-ELO);userData=true;buildLayers();badge();if(route)mkRoute();panel();dirty=true});
+
+</script></body></html>
